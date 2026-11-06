@@ -151,7 +151,7 @@ jobs:
       - name: Install Fedora build and packaging dependencies
         working-directory: source
         run: |
-          dnf install -y wayland-devel libxkbcommon-devel alsa-lib-devel systemd-devel librsvg2-tools
+          dnf install -y wayland-devel libxkbcommon-devel alsa-lib-devel systemd-devel librsvg2-tools file
           fetch() {
             curl --fail --location --silent --show-error --output "$1" "$2"
             echo "$3  $1" | sha256sum --check --strict
