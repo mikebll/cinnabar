@@ -91,6 +91,10 @@ jobs:
     runs-on: ubuntu-24.04
     container: fedora:latest
     timeout-minutes: 120
+    # Anulamos la configuración global de source para que el contenedor pueda iniciar correctamente
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
     env:
       CINNABAR_RELEASE_CHANNEL: ${{ needs.prepare.outputs.channel }}
       APPIMAGE_EXTRACT_AND_RUN: 1
@@ -102,10 +106,9 @@ jobs:
       CARGO_PROFILE_RELEASE_STRIP: "none"
     steps:
       - name: Install base dependencies for checkout and Rust
-        working-directory: ${{ github.workspace }}
         run: |
           dnf update -y
-          dnf install -y git curl gcc gcc-c++ make tar findutils
+          dnf install -y git curl gcc gcc-c++ make tar findutils python3
       - uses: actions/checkout@v6
         with:
           ref: ${{ needs.prepare.outputs.ref }}
@@ -117,8 +120,10 @@ jobs:
           path: release-tools
           persist-credentials: false
       - name: Resolve the downloadable artifact name
+        working-directory: source
         run: python3 "$GITHUB_WORKSPACE/release-tools/packaging/release-downloads.py" env linux x86_64 --version "${{ needs.prepare.outputs.version }}" >> "$GITHUB_ENV"
       - name: Install the pinned Rust toolchain
+        working-directory: source
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           source "$HOME/.cargo/env"
@@ -144,8 +149,9 @@ jobs:
           lane: release
           store: artifact
       - name: Install Fedora build and packaging dependencies
+        working-directory: source
         run: |
-          dnf install -y python3 wayland-devel libxkbcommon-devel alsa-lib-devel systemd-devel librsvg2-tools
+          dnf install -y wayland-devel libxkbcommon-devel alsa-lib-devel systemd-devel librsvg2-tools
           fetch() {
             curl --fail --location --silent --show-error --output "$1" "$2"
             echo "$3  $1" | sha256sum --check --strict
@@ -156,6 +162,7 @@ jobs:
           echo "APPIMAGETOOL=$RUNNER_TEMP/appimagetool" >> "$GITHUB_ENV"
           echo "APPIMAGE_RUNTIME=$RUNNER_TEMP/appimage-runtime" >> "$GITHUB_ENV"
       - name: Package
+        working-directory: source
         run: |
           make package-binaries PACKAGE_CARGO_FLAGS=--timings
           shipped="$RUNNER_TEMP/release-binaries"
@@ -164,11 +171,13 @@ jobs:
           mv .local/dist/linux-release/Cinnabar-*-x86_64.AppImage "$RUNNER_TEMP/$RELEASE_ASSET"
       - name: Collect release symbols
         id: symbols
+        working-directory: source
         run: |
           python3 "$GITHUB_WORKSPACE/release-tools/packaging/release-symbols.py" collect linux x86_64 \
             --version "${{ needs.prepare.outputs.version }}" --commit "${{ needs.prepare.outputs.commit }}" \
             --binaries "$RUNNER_TEMP/release-binaries" --out "$RUNNER_TEMP/$SYMBOLS_ASSET"
       - name: Check the AppImage against the payload allowlist
+        working-directory: source
         run: |
           cd "$RUNNER_TEMP"
           "./$RELEASE_ASSET" --appimage-extract > /dev/null
